@@ -968,7 +968,7 @@ fi
 echo " "
 echo "--------------------------------------------------------------------------------"
 echo "*                                Premium Script                                *"
-echo "*                                  JohnFordTV                                  *"
+echo "*                                  fb/hoyeponce                                *"
 echo "--------------------------------------------------------------------------------"
 echo ""  | tee -a log-install.txt
 echo "---------------"  | tee -a log-install.txt
@@ -996,7 +996,7 @@ echo "Important information"  | tee -a log-install.txt
 echo "----------------"  | tee -a log-install.txt
 echo "   - Installation Log    : cat /root/log-install.txt"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
-echo "  Copyright@2021 JohnFordTV"  | tee -a log-install.txt
+echo "  Copyright@2021 THD-Hoye"  | tee -a log-install.txt
 echo ""  | tee -a log-install.txt
 echo "---------------------------- REBOOT YOUR VPS! -----------------------------"
 
