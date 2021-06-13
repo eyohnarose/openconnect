@@ -1,0 +1,1005 @@
+#!/usr/bin/env bash
+# JohnFordTV's OpenConnect Script
+# © Github.com/johndesu090
+# Official Repository: https://github.com/johndesu090/
+# For Updates, Suggestions, and Bug Reports, Join to my Messenger Groupchat(VPS Owners): https://m.me/join/AbbHxIHfrY9SmoBO
+# For Donations, Im accepting prepaid loads or GCash transactions:
+# Smart: 09206200840
+# Facebook: https://fb.me/johndesu090
+
+#############################
+#############################
+# Variables (Can be changed depends on your preferred values)
+
+# Script name
+MyScriptName='JohnFordTV-OpenConnect'
+
+# OpenSSH Ports
+SSH_Port1='22'
+
+# Your SSH Banner
+SSH_Banner='https://www.dropbox.com/s/01jed4dmaq7cu8b/issue.net'
+
+# Dropbear Ports
+Dropbear_Port1='550'
+Dropbear_Port2='442'
+
+# Squid Ports
+Squid_Port1='8080'
+
+# OpenConnect Ports
+OpenConnect_Port1='110'
+
+# Stunnel Ports
+Stunnel_Port1='444' # through Dropbear
+Stunnel_Port2='443' # through OpenConnect
+
+# Server local time
+MyVPS_Time='Asia/Manila'
+
+#############################
+
+#############################
+#############################
+## All function used for this script
+#############################
+## WARNING: Do not modify or edit anything
+## if you did'nt know what to do.
+## This part is too sensitive.
+#############################
+#############################
+
+function InstUpdates(){
+ export DEBIAN_FRONTEND=noninteractive
+ apt-get update
+ apt-get upgrade -y
+ 
+ # Removing some firewall tools that may affect other services
+ apt-get remove --purge ufw firewalld -y
+
+ 
+ # Installing some important machine essentials
+ apt-get install nano wget curl zip unzip tar gzip p7zip-full bc rc openssl cron net-tools dnsutils dos2unix screen bzip2 psmisc lsof ccrypt -y
+ 
+ # Now installing all our wanted services
+ apt-get install gnupg tcpdump grepcidr gnutls-bin dropbear ocserv stunnel4 screen ca-certificates ruby apt-transport-https lsb-release squid -y
+
+ # Installing all required package
+ apt-get install perl libnet-ssleay-perl openssl libauthen-pam-perl libpam-runtime libio-pty-perl apt-show-versions python dbus libxml-parser-perl -y
+ apt-get install shared-mime-info jq fail2ban -y
+
+ 
+ # Installing a text colorizer
+ gem install lolcat
+
+ # Trying to remove obsolette packages after installation
+ apt-get autoremove -y
+ 
+}
+
+function InsProxy(){
+ 
+ # Creating Squid server config using cat eof tricks
+ cat <<'mySquid' > /etc/squid/squid.conf
+# My Squid Proxy Server Config
+acl VPN dst IP-ADDRESS/32
+http_access allow VPN
+http_access deny all 
+http_port Squid_Port1
+### Allow Headers
+request_header_access Allow allow all 
+request_header_access Authorization allow all 
+request_header_access WWW-Authenticate allow all 
+request_header_access Proxy-Authorization allow all 
+request_header_access Proxy-Authenticate allow all 
+request_header_access Cache-Control allow all 
+request_header_access Content-Encoding allow all 
+request_header_access Content-Length allow all 
+request_header_access Content-Type allow all 
+request_header_access Date allow all 
+request_header_access Expires allow all 
+request_header_access Host allow all 
+request_header_access If-Modified-Since allow all 
+request_header_access Last-Modified allow all 
+request_header_access Location allow all 
+request_header_access Pragma allow all 
+request_header_access Accept allow all 
+request_header_access Accept-Charset allow all 
+request_header_access Accept-Encoding allow all 
+request_header_access Accept-Language allow all 
+request_header_access Content-Language allow all 
+request_header_access Mime-Version allow all 
+request_header_access Retry-After allow all 
+request_header_access Title allow all 
+request_header_access Connection allow all 
+request_header_access Proxy-Connection allow all 
+request_header_access User-Agent allow all 
+request_header_access Cookie allow all 
+request_header_access All deny all
+### HTTP Anonymizer Paranoid
+reply_header_access Allow allow all 
+reply_header_access Authorization allow all 
+reply_header_access WWW-Authenticate allow all 
+reply_header_access Proxy-Authorization allow all 
+reply_header_access Proxy-Authenticate allow all 
+reply_header_access Cache-Control allow all 
+reply_header_access Content-Encoding allow all 
+reply_header_access Content-Length allow all 
+reply_header_access Content-Type allow all 
+reply_header_access Date allow all 
+reply_header_access Expires allow all 
+reply_header_access Host allow all 
+reply_header_access If-Modified-Since allow all 
+reply_header_access Last-Modified allow all 
+reply_header_access Location allow all 
+reply_header_access Pragma allow all 
+reply_header_access Accept allow all 
+reply_header_access Accept-Charset allow all 
+reply_header_access Accept-Encoding allow all 
+reply_header_access Accept-Language allow all 
+reply_header_access Content-Language allow all 
+reply_header_access Mime-Version allow all 
+reply_header_access Retry-After allow all 
+reply_header_access Title allow all 
+reply_header_access Connection allow all 
+reply_header_access Proxy-Connection allow all 
+reply_header_access User-Agent allow all 
+reply_header_access Cookie allow all 
+reply_header_access All deny all
+### CoreDump
+coredump_dir /var/spool/squid
+dns_nameservers 8.8.8.8 8.8.4.4
+refresh_pattern ^ftp: 1440 20% 10080
+refresh_pattern ^gopher: 1440 0% 1440
+refresh_pattern -i (/cgi-bin/|\?) 0 0% 0
+refresh_pattern . 0 20% 4320
+visible_hostname JohnFordTV
+mySquid
+
+ # Setting machine's IP Address inside of our Squid config(security that only allows this machine to use this proxy server)
+ sed -i "s|IP-ADDRESS|$ip|g" /etc/squid/squid.conf
+ 
+ # Setting squid ports
+ sed -i "s|Squid_Port1|$Squid_Port1|g" /etc/squid/squid.conf
+
+
+ # Starting Proxy server
+ echo -e "Restarting proxy server..."
+ systemctl restart squid
+ 
+}
+
+function InsStunnel(){
+ StunnelDir=$(ls /etc/default | grep stunnel | head -n1)
+
+ # Creating stunnel startup config using cat eof tricks
+cat <<'MyStunnelD' > /etc/default/$StunnelDir
+# My Stunnel Config
+ENABLED=1
+FILES="/etc/stunnel/*.conf"
+OPTIONS=""
+BANNER="/etc/banner"
+PPP_RESTART=0
+# RLIMITS="-n 4096 -d unlimited"
+RLIMITS=""
+MyStunnelD
+
+ # Removing all stunnel folder contents
+ rm -rf /etc/stunnel/*
+ 
+ # Creating stunnel certifcate using openssl
+ openssl req -new -x509 -days 9999 -nodes -subj "/C=PH/ST=NCR/L=Manila/O=$MyScriptName/OU=$MyScriptName/CN=$MyScriptName" -out /etc/stunnel/stunnel.pem -keyout /etc/stunnel/stunnel.pem &> /dev/null
+##  > /dev/null 2>&1
+
+ # Creating stunnel server config
+ cat <<'MyStunnelC' > /etc/stunnel/stunnel.conf
+# My Stunnel Config
+pid = /var/run/stunnel.pid
+cert = /etc/stunnel/stunnel.pem
+client = no
+socket = l:TCP_NODELAY=1
+socket = r:TCP_NODELAY=1
+TIMEOUTclose = 0
+
+[dropbear]
+accept = Stunnel_Port1
+connect = 127.0.0.1:442
+
+[openconnect]
+accept = Stunnel_Port2
+connect = 127.0.0.1:110
+
+MyStunnelC
+
+ # setting stunnel ports
+ sed -i "s|Stunnel_Port1|$Stunnel_Port1|g" /etc/stunnel/stunnel.conf
+ sed -i "s|Stunnel_Port2|$Stunnel_Port2|g" /etc/stunnel/stunnel.conf
+
+ # Restarting stunnel service
+ systemctl restart $StunnelDir
+
+}
+
+function InstSSH(){
+ # Removing some duplicated sshd server configs
+ rm -f /etc/ssh/sshd_config
+ 
+ # Creating a SSH server config using cat eof tricks
+ cat <<'MySSHConfig' > /etc/ssh/sshd_config
+# My OpenSSH Server config
+Port myPORT1
+AddressFamily inet
+ListenAddress 0.0.0.0
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+PermitRootLogin yes
+MaxSessions 1024
+PubkeyAuthentication yes
+PasswordAuthentication yes
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding yes
+PrintMotd no
+ClientAliveInterval 240
+ClientAliveCountMax 2
+UseDNS no
+Banner /etc/banner
+AcceptEnv LANG LC_*
+Subsystem   sftp  /usr/lib/openssh/sftp-server
+MySSHConfig
+
+ # Now we'll put our ssh ports inside of sshd_config
+ sed -i "s|myPORT1|$SSH_Port1|g" /etc/ssh/sshd_config
+
+ # Download our SSH Banner
+ rm -f /etc/banner
+ wget -qO /etc/banner "$SSH_Banner"
+ dos2unix -q /etc/banner
+
+ # My workaround code to remove `BAD Password error` from passwd command, it will fix password-related error on their ssh accounts.
+ sed -i '/password\s*requisite\s*pam_cracklib.s.*/d' /etc/pam.d/common-password
+ sed -i 's/use_authtok //g' /etc/pam.d/common-password
+
+ # Some command to identify null shells when you tunnel through SSH or using Stunnel, it will fix user/pass authentication error on HTTP Injector, KPN Tunnel, eProxy, SVI, HTTP Proxy Injector etc ssh/ssl tunneling apps.
+ sed -i '/\/bin\/false/d' /etc/shells
+ sed -i '/\/usr\/bin\/nologin/d' /etc/shells
+ echo '/bin/false' >> /etc/shells
+ echo '/usr/bin/nologin' >> /etc/shells
+ 
+ # Restarting openssh service
+ systemctl restart ssh
+ 
+ # Creating dropbear config using cat
+ cat <<'MyDropbear' > /etc/default/dropbear
+# My Dropbear Config
+NO_START=0
+DROPBEAR_PORT=Dropbear_Port1
+DROPBEAR_EXTRA_ARGS="-p Dropbear_Port2"
+DROPBEAR_BANNER="/etc/banner"
+DROPBEAR_RSAKEY="/etc/dropbear/dropbear_rsa_host_key"
+DROPBEAR_DSSKEY="/etc/dropbear/dropbear_dss_host_key"
+DROPBEAR_ECDSAKEY="/etc/dropbear/dropbear_ecdsa_host_key"
+DROPBEAR_RECEIVE_WINDOW=65536
+MyDropbear
+
+ # Setting dropbear ports
+ sed -i "s|Dropbear_Port1|$Dropbear_Port1|g" /etc/default/dropbear
+ sed -i "s|Dropbear_Port2|$Dropbear_Port2|g" /etc/default/dropbear
+
+ # Restarting dropbear service
+ systemctl restart dropbear
+
+}
+
+function InstPysocks(){
+ 
+ # Create proxydirect python script via cat eof
+ cat <<'PythonSocks' > /root/proxydirect.py
+import socket, threading, thread, select, signal, sys, time, getopt
+
+# Listen
+LISTENING_ADDR = '0.0.0.0'
+if sys.argv[1:]:
+  LISTENING_PORT = sys.argv[1]
+else:
+  LISTENING_PORT = 80  
+#Pass
+PASS = ''
+
+# CONST
+BUFLEN = 4096 * 4
+TIMEOUT = 60
+DEFAULT_HOST = '127.0.0.1:22'
+RESPONSE = 'HTTP/1.1 200 Connection established\r\n\r\n'
+#RESPONSE = 'HTTP/1.1 200 SERVIDOR-NETWORK[RS]\r\nContent-length: 0\r\n\r\nHTTP/1.1 200 Connection established\r\n\r\n'  # lint:ok
+
+class Server(threading.Thread):
+    def __init__(self, host, port):
+        threading.Thread.__init__(self)
+        self.running = False
+        self.host = host
+        self.port = port
+        self.threads = []
+        self.threadsLock = threading.Lock()
+        self.logLock = threading.Lock()
+
+    def run(self):
+        self.soc = socket.socket(socket.AF_INET)
+        self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.soc.settimeout(2)
+        intport = int(self.port)
+        self.soc.bind((self.host, intport))
+        self.soc.listen(0)
+        self.running = True
+
+        try:
+            while self.running:
+                try:
+                    c, addr = self.soc.accept()
+                    c.setblocking(1)
+                except socket.timeout:
+                    continue
+
+                conn = ConnectionHandler(c, self, addr)
+                conn.start()
+                self.addConn(conn)
+        finally:
+            self.running = False
+            self.soc.close()
+
+    def printLog(self, log):
+        self.logLock.acquire()
+        print log
+        self.logLock.release()
+
+    def addConn(self, conn):
+        try:
+            self.threadsLock.acquire()
+            if self.running:
+                self.threads.append(conn)
+        finally:
+            self.threadsLock.release()
+
+    def removeConn(self, conn):
+        try:
+            self.threadsLock.acquire()
+            self.threads.remove(conn)
+        finally:
+            self.threadsLock.release()
+
+    def close(self):
+        try:
+            self.running = False
+            self.threadsLock.acquire()
+
+            threads = list(self.threads)
+            for c in threads:
+                c.close()
+        finally:
+            self.threadsLock.release()
+
+
+class ConnectionHandler(threading.Thread):
+    def __init__(self, socClient, server, addr):
+        threading.Thread.__init__(self)
+        self.clientClosed = False
+        self.targetClosed = True
+        self.client = socClient
+        self.client_buffer = ''
+        self.server = server
+        self.log = 'Connection: ' + str(addr)
+
+    def close(self):
+        try:
+            if not self.clientClosed:
+                self.client.shutdown(socket.SHUT_RDWR)
+                self.client.close()
+        except:
+            pass
+        finally:
+            self.clientClosed = True
+
+        try:
+            if not self.targetClosed:
+                self.target.shutdown(socket.SHUT_RDWR)
+                self.target.close()
+        except:
+            pass
+        finally:
+            self.targetClosed = True
+
+    def run(self):
+        try:
+            self.client_buffer = self.client.recv(BUFLEN)
+
+            hostPort = self.findHeader(self.client_buffer, 'X-Real-Host')
+
+            if hostPort == '':
+                hostPort = DEFAULT_HOST
+
+            split = self.findHeader(self.client_buffer, 'X-Split')
+
+            if split != '':
+                self.client.recv(BUFLEN)
+
+            if hostPort != '':
+                passwd = self.findHeader(self.client_buffer, 'X-Pass')
+				
+                if len(PASS) != 0 and passwd == PASS:
+                    self.method_CONNECT(hostPort)
+                elif len(PASS) != 0 and passwd != PASS:
+                    self.client.send('HTTP/1.1 400 WrongPass!\r\n\r\n')
+                elif hostPort.startswith('127.0.0.1') or hostPort.startswith('localhost'):
+                    self.method_CONNECT(hostPort)
+                else:
+                    self.client.send('HTTP/1.1 403 Forbidden!\r\n\r\n')
+            else:
+                print '- No X-Real-Host!'
+                self.client.send('HTTP/1.1 400 NoXRealHost!\r\n\r\n')
+
+        except Exception as e:
+            self.log += ' - error: ' + e.strerror
+            self.server.printLog(self.log)
+	    pass
+        finally:
+            self.close()
+            self.server.removeConn(self)
+
+    def findHeader(self, head, header):
+        aux = head.find(header + ': ')
+
+        if aux == -1:
+            return ''
+
+        aux = head.find(':', aux)
+        head = head[aux+2:]
+        aux = head.find('\r\n')
+
+        if aux == -1:
+            return ''
+
+        return head[:aux];
+
+    def connect_target(self, host):
+        i = host.find(':')
+        if i != -1:
+            port = int(host[i+1:])
+            host = host[:i]
+        else:
+            if self.method=='CONNECT':
+                port = 22
+            else:
+                port = sys.argv[1]
+
+        (soc_family, soc_type, proto, _, address) = socket.getaddrinfo(host, port)[0]
+
+        self.target = socket.socket(soc_family, soc_type, proto)
+        self.targetClosed = False
+        self.target.connect(address)
+
+    def method_CONNECT(self, path):
+        self.log += ' - CONNECT ' + path
+
+        self.connect_target(path)
+        self.client.sendall(RESPONSE)
+        self.client_buffer = ''
+
+        self.server.printLog(self.log)
+        self.doCONNECT()
+
+    def doCONNECT(self):
+        socs = [self.client, self.target]
+        count = 0
+        error = False
+        while True:
+            count += 1
+            (recv, _, err) = select.select(socs, [], socs, 3)
+            if err:
+                error = True
+            if recv:
+                for in_ in recv:
+		    try:
+                        data = in_.recv(BUFLEN)
+                        if data:
+			    if in_ is self.target:
+				self.client.send(data)
+                            else:
+                                while data:
+                                    byte = self.target.send(data)
+                                    data = data[byte:]
+
+                            count = 0
+			else:
+			    break
+		    except:
+                        error = True
+                        break
+            if count == TIMEOUT:
+                error = True
+            if error:
+                break
+
+
+def print_usage():
+    print 'Usage: proxy.py -p <port>'
+    print '       proxy.py -b <bindAddr> -p <port>'
+    print '       proxy.py -b 0.0.0.0 -p 80'
+
+def parse_args(argv):
+    global LISTENING_ADDR
+    global LISTENING_PORT
+    
+    try:
+        opts, args = getopt.getopt(argv,"hb:p:",["bind=","port="])
+    except getopt.GetoptError:
+        print_usage()
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print_usage()
+            sys.exit()
+        elif opt in ("-b", "--bind"):
+            LISTENING_ADDR = arg
+        elif opt in ("-p", "--port"):
+            LISTENING_PORT = int(arg)
+
+
+def main(host=LISTENING_ADDR, port=LISTENING_PORT):
+    print "\n:-------KryptSocks-------:\n"
+    print "Listening addr: " + LISTENING_ADDR
+    print "Listening port: " + str(LISTENING_PORT) + "\n"
+    print ":-------------------------:\n"
+    server = Server(LISTENING_ADDR, LISTENING_PORT)
+    server.start()
+    while True:
+        try:
+            time.sleep(2)
+        except KeyboardInterrupt:
+            print 'Stopping...'
+            server.close()
+            break
+
+#######    parse_args(sys.argv[1:])
+if __name__ == '__main__':
+    main()
+PythonSocks
+ 
+ # Create Checker script for PySocks
+ cat <<'cheker' > /etc/FordVPN/checksocks.sh
+#!/bin/bash
+SERVICE="0.0.0.0:80"
+if
+netstat -apn |grep "0.0.0.0:80" >/dev/null
+then
+echo "$SERVICE is running"
+else
+echo "$SERVICE stopped"
+#start socks if stopped 
+python /root/proxydirect.py 80 KRYPTOMIC &
+fi
+
+cheker
+
+chmod +x /etc/FordVPN/checksocks.sh
+
+}
+
+function ip_address(){
+  local IP="$( ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )"
+  [ -z "${IP}" ] && IP="$( wget -qO- -t1 -T2 ipv4.icanhazip.com )"
+  [ -z "${IP}" ] && IP="$( wget -qO- -t1 -T2 ipinfo.io/ip )"
+  [ ! -z "${IP}" ] && echo "${IP}" || echo
+} 
+ip="$(ip_address)"
+
+function InstOC(){
+
+ip=$(hostname -I|cut -f1 -d ' ')
+echo "Your Server IP address is:$ip"
+
+echo -e "\e[32mInstalling gnutls-bin\e[39m"
+
+apt install gnutls-bin
+mkdir certificates
+cd certificates
+
+cat << EOF > ca.tmpl
+cn = "FordVPN"
+organization = "JohnFordTV"
+serial = 1
+expiration_days = 3650
+ca
+signing_key
+cert_signing_key
+crl_signing_key
+EOF
+
+certtool --generate-privkey --outfile ca-key.pem
+certtool --generate-self-signed --load-privkey ca-key.pem --template ca.tmpl --outfile ca-cert.pem
+
+cat << EOF1 > server.tmpl
+#yourIP
+cn=$ip
+organization = "JohnFordTV"
+expiration_days = 3650
+signing_key
+encryption_key
+tls_www_server
+EOF1
+
+certtool --generate-privkey --outfile server-key.pem
+certtool --generate-certificate --load-privkey server-key.pem --load-ca-certificate ca-cert.pem --load-ca-privkey ca-key.pem --template server.tmpl --outfile server-cert.pem
+
+echo -e "\e[32mInstalling ocserv\e[39m"
+apt install ocserv
+cp /etc/ocserv/ocserv.conf ~/certificates/
+
+# Deleting Remnants of OCServ config
+rm -rf /etc/ocserv/ocserv.conf
+
+# Creating OpenConnect Server Config
+cat <<'MyOCServ' > /etc/ocserv/ocserv.conf
+# My OpenConnect Server Config
+auth = "plain[passwd=/etc/ocserv/ocpasswd]"
+tcp-port = 443
+#udp-port = 443
+run-as-user = nobody
+run-as-group = daemon
+socket-file = /var/run/ocserv-socket
+server-cert = /etc/ocserv/server-cert.pem
+server-key = /etc/ocserv/server-key.pem
+ca-cert = /etc/ssl/certs/ssl-cert-snakeoil.pem
+isolate-workers = true
+max-clients = 0
+max-same-clients = 0
+keepalive = 32400
+dpd = 90
+mobile-dpd = 1800
+try-mtu-discovery = truefalse
+cert-user-oid = 0.9.2342.19200300.100.1.1
+tls-priorities = "NORMAL:%SERVER_PRECEDENCE:%COMPAT:-VERS-SSL3.0"
+auth-timeout = 240
+min-reauth-time = 3
+max-ban-score = 50
+ban-reset-time = 300
+cookie-timeout = 300
+deny-roaming = false
+rekey-time = 172800
+rekey-method = ssl
+use-utmp = true
+use-occtl = true
+pid-file = /var/run/ocserv.pid
+device = vpns
+predictable-ips = true
+default-domain = example.com
+ipv4-network = 192.168.1.0
+ipv4-netmask = 255.255.255.0
+dns = 1.1.1.1
+dns = 1.0.0.1
+ping-leases = false
+no-route = 192.168.5.0/255.255.255.0
+cisco-client-compat = true
+dtls-legacy = true
+
+MyOCServ
+
+# Remove default 443 ocserv socket
+rm -rf /lib/systemd/system/ocserv.socket
+
+# Create a new ocserv socket
+cat <<'ocservbinder' > /lib/systemd/system/ocserv.socket
+[Unit]
+Description=OpenConnect SSL VPN server Socket
+
+[Socket]
+ListenStream=110
+ListenDatagram=110
+BindIPv6Only=default
+Accept=false
+ReusePort=true
+
+[Install]
+WantedBy=sockets.target
+ocservbinder
+
+systemctl daemon-reload
+
+echo "Enter a username:"
+read username
+
+ocpasswd -c /etc/ocserv/ocpasswd $username
+iptables -t nat -A POSTROUTING -j MASQUERADE
+sed -i -e 's@#net.ipv4.ip_forward=@net.ipv4.ip_forward=@g' /etc/sysctl.conf
+
+sysctl -p /etc/sysctl.conf
+cp ~/certificates/server-key.pem /etc/ocserv/
+cp ~/certificates/server-cert.pem /etc/ocserv/
+echo -e "\e[32mStopping ocserv service\e[39m"
+service ocserv stop
+echo -e "\e[32mStarting ocserv service\e[39m"
+service ocserv start
+
+echo "OpenConnect Server Configured Succesfully" | lolcat
+
+}
+
+function ConfMenu(){
+
+echo -e " Creating Menu script.." | lolcat
+
+cd /usr/local/sbin/
+rm -rf menu
+wget -q 'https://www.dropbox.com/s/tjk7evxtf1ed28b/menu'
+chmod +x menu
+cd ~
+
+echo "clear" >> .bashrc
+echo 'echo -e ""' >> .bashrc
+echo 'echo -e "     =========================================================" | lolcat' >> .bashrc
+echo 'echo -e "     *                  WELCOME TO VPS SERVER                *" | lolcat' >> .bashrc
+echo 'echo -e "     =========================================================" | lolcat' >> .bashrc
+echo 'echo -e "     *                 Autoscript By JohnFordTV              *" | lolcat' >> .bashrc
+echo 'echo -e "     *                     Debian  & Ubuntu                  *" | lolcat' >> .bashrc
+echo 'echo -e "     *                   Facebook: johndesu090               *" | lolcat' >> .bashrc
+echo 'echo -e "     =========================================================" | lolcat' >> .bashrc
+echo 'echo -e "     *  	       Type \033[1;32mmenu\033[0m to enter commands            *"' >> .bashrc
+echo 'echo -e "     =========================================================" | lolcat' >> .bashrc
+echo 'echo -e ""' >> .bashrc
+
+}
+
+function InstBadVPN(){
+ # Pull BadVPN Binary 64bit or 32bit
+if [ "$(getconf LONG_BIT)" == "64" ]; then
+ wget -O /usr/bin/badvpn-udpgw "https://www.dropbox.com/s/vttdpw9e4r9owt5/badvpn-udpgw64"
+else
+ wget -O /usr/bin/badvpn-udpgw "https://www.dropbox.com/s/db0uqdndpsra8h4/badvpn-udpgw"
+fi
+ # Set BadVPN to Start on Boot via .profile
+ sed -i '$ i\screen -AmdS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300' /root/.profile
+ # Change Permission to make it Executable
+ chmod +x /usr/bin/badvpn-udpgw
+ # Start BadVPN via Screen
+ screen -AmdS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300
+ 
+ # Create Checker script for BadVPN
+ cat <<'badcheker' > /etc/FordVPN/checkbadvpn.sh
+#!/bin/bash
+SERVICE="0.0.0.0:7300"
+if
+netstat -apn |grep "0.0.0.0:7300" >/dev/null
+then
+echo "$SERVICE is running"
+else
+echo "$SERVICE stopped"
+#start socks if stopped 
+screen -AmdS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300
+fi
+
+badcheker
+
+chmod +x /etc/FordVPN/checkbadvpn.sh
+
+}
+
+function ConfStartup(){
+
+# Daily reboot time of our machine
+# For cron commands, visit https://crontab.guru
+echo -e "0 4\t* * *\troot\treboot" > /etc/cron.d/b_reboot_job
+echo -e "*/5 * * * * root /bin/bash /etc/FordVPN/checkbadvpn.sh" > /etc/cron.d/check_badvpn
+echo -e "*/5 * * * * root /bin/bash /etc/FordVPN/checksocks.sh" > /etc/cron.d/check_socksdirect
+
+
+# Creating directory for startup script
+
+# Allow IPv4 Forwarding
+sed -i '/net.ipv4.ip_forward.*/d' /etc/sysctl.conf
+sed -i '/net.ipv4.ip_forward.*/d' /etc/sysctl.d/*.conf
+echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/20-openconnect.conf
+sysctl --system &> /dev/null
+ 
+rm -rf /etc/FordVPN
+mkdir -p /etc/FordVPN
+chmod -R 755 /etc/FordVPN
+ 
+# Creating startup script using cat eof tricks
+ cat <<'EOFSH' > /etc/FordVPN/startup.sh
+#!/bin/bash
+# Setting server local time
+ln -fs /usr/share/zoneinfo/MyVPS_Time /etc/localtime
+
+# Prevent DOS-like UI when installing using APT (Disabling APT interactive dialog)
+export DEBIAN_FRONTEND=noninteractive
+
+# Allowing ALL TCP ports for our machine (Simple workaround for policy-based VPS)
+iptables -A INPUT -s $(wget -4qO- http://ipinfo.io/ip) -p tcp -m multiport --dport 1:65535 -j ACCEPT
+
+# Allowing OpenCpnnect to Forward traffic
+iptables -t filter -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
+iptables -t filter -A INPUT -p udp -m udp --dport 443 -j ACCEPT
+iptables -t filter -A INPUT -p tcp -m tcp --dport 110 -j ACCEPT
+iptables -t filter -A INPUT -p udp -m udp --dport 110 -j ACCEPT
+iptables -t nat -A POSTROUTING  -j MASQUERADE
+
+# Startup BadVPN
+screen -AmdS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300
+
+# Startup Stunnel
+service stunnel4 start
+
+# Deleting Expired SSH Accounts
+/usr/local/bin/user-delete-expired &> /dev/null
+
+# Startup PythonSocks
+python /root/proxydirect.py 80 KRYPTOMIC &
+exit 0
+EOFSH
+chmod +x /etc/FordVPN/startup.sh
+ 
+# Setting server local time every time this machine reboots
+sed -i "s|MyVPS_Time|$MyVPS_Time|g" /etc/FordVPN/startup.sh
+
+# 
+rm -rf /etc/sysctl.d/99*
+
+# Setting our startup script to run every machine boots 
+ cat <<'KaizenServ' > /etc/systemd/system/FordVPN.service
+[Unit]
+Description=FordVPN Startup Script
+Before=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /etc/FordVPN/startup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+KaizenServ
+
+chmod +x /etc/systemd/system/FordVPN.service
+systemctl daemon-reload
+systemctl start FordVPN
+systemctl enable FordVPN &> /dev/null
+systemctl enable fail2ban &> /dev/null
+systemctl start fail2ban &> /dev/null
+
+# Rebooting cron service
+systemctl restart cron
+systemctl enable cron
+ 
+}
+
+function ScriptMessage(){
+ echo -e " [ $MyScriptName ]" | lolcat
+ echo -e ""
+ echo -e " https://fb.com/johndesu090"
+ echo -e "[GCASH] 09206200840 [PAYONEER] admin@johnfordtv.tech"
+ echo -e ""
+}
+
+#############################################
+#############################################
+########## Installation Process##############
+#############################################
+## WARNING: Do not modify or edit anything
+## if you did'nt know what to do.
+## This part is too sensitive.
+#############################################
+#############################################
+
+ # Check if our machine is in root user, if not, this script exits
+ # If you're on sudo user, run `sudo su -` first before running this script
+ if [[ $EUID -ne 0 ]];then
+ ScriptMessage
+ echo -e "[\e[1;31mError\e[0m] This script must be run as root, exiting..."
+ exit 1
+fi
+
+ # Begin Installation by Updating and Upgrading machine and then Installing all our wanted packages/services to be install.
+ InstUpdates
+ clear
+ ScriptMessage
+ sleep 10
+ 
+ # Configure OpenSSH
+ echo -e "Configuring SSH and Dropbear..." | lolcat
+ sleep 5
+ InstSSH
+ 
+ # Configure Squid
+ echo -e "Configuring Proxy..." | lolcat
+ sleep 5
+ InsProxy
+ 
+ # Configure BadVPN UDPGW
+ echo -e "Configuring BadVPN UDPGW... " | lolcat
+ sleep 5
+ InstBadVPN
+ 
+ # Some assistance and startup scripts
+ echo -e "Configuring Menu Script..." | lolcat
+ sleep 5
+ ConfMenu
+ 
+ # Configure SSLH
+ echo -e "Configuring Pysocks Proxydirect..." | lolcat
+ InstPysocks
+ 
+ # Configure Squid
+ echo -e "Configuring SSL..." | lolcat
+ sleep 5
+ InsStunnel
+ 
+ # Configure OpenConnect Service
+ echo -e "Configuring OpenConnect Server..." | lolcat
+ sleep 5
+ InstOC
+ 
+ # Configure Startup Script
+ echo -e "Configuring Startup Script..." | lolcat
+ sleep 5
+ ConfStartup
+ 
+ # Setting server local time
+ ln -fs /usr/share/zoneinfo/$MyVPS_Time /etc/localtime
+ 
+ # Showing script's banner message
+ ScriptMessage
+ sleep 10
+ 
+ clear
+ cd ~
+ 
+#############################################
+#############################################
+####### End of Installation Process##########
+#############################################
+## Showing Ports via Echo command 
+## cat log-install.txt to view logs
+#############################################
+#############################################
+
+# Showing additional information from installating this script
+echo " "
+echo "--------------------------------------------------------------------------------"
+echo "*                                Premium Script                                *"
+echo "*                                  JohnFordTV                                  *"
+echo "--------------------------------------------------------------------------------"
+echo ""  | tee -a log-install.txt
+echo "---------------"  | tee -a log-install.txt
+echo "Server Information"  | tee -a log-install.txt
+echo "---------------"  | tee -a log-install.txt
+echo "   - Timezone    : Asia/Manila (GMT +8)"  | tee -a log-install.txt
+echo "   - Fail2Ban    : [ON]"  | tee -a log-install.txt
+echo "   - IPtables    : [ON]"  | tee -a log-install.txt
+echo "   - Auto-Reboot : [ON]"  | tee -a log-install.txt
+echo "   - IPv6        : [OFF]"  | tee -a log-install.txt
+echo ""  | tee -a log-install.txt
+echo "---------------------------"  | tee -a log-install.txt
+echo "Application and Port Information"  | tee -a log-install.txt
+echo "---------------------------"  | tee -a log-install.txt
+echo "   - OpenConnect	: $OpenConnect_Port1"  | tee -a log-install.txt
+echo "   - OpenSSH		: $SSH_Port1"  | tee -a log-install.txt
+echo "   - BadVPN		: 7300"  | tee -a log-install.txt
+echo "   - Squid		: $Squid_Port1 (limit to IP Server)"  | tee -a log-install.txt
+echo "   - SSL OCServ	: $Stunnel_Port2"  | tee -a log-install.txt
+echo "   - SSL SSH	    : $Stunnel_Port1"  | tee -a log-install.txt
+echo "   - SocksDirect	: 80"  | tee -a log-install.txt
+echo ""  | tee -a log-install.txt
+echo "----------------"  | tee -a log-install.txt
+echo "Important information"  | tee -a log-install.txt
+echo "----------------"  | tee -a log-install.txt
+echo "   - Installation Log    : cat /root/log-install.txt"  | tee -a log-install.txt
+echo ""  | tee -a log-install.txt
+echo "  Copyright@2021 JohnFordTV"  | tee -a log-install.txt
+echo ""  | tee -a log-install.txt
+echo "---------------------------- REBOOT YOUR VPS! -----------------------------"
+
+ # Clearing all logs from installation
+rm -rf /root/.bash_history && history -c && echo '' > /var/log/syslog
+rm -f openconnec*
